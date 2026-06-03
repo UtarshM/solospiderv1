@@ -1,0 +1,22 @@
+{
+  "name": "solospider-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SoloSpider AI Monorepo — Next.js app, BullMQ worker, Supabase",
+  "scripts": {
+    "dev": "npm run dev --prefix apps/web-next",
+    "build": "npm run build --prefix apps/web-next",
+    "dev:next": "npm run dev --prefix apps/web-next",
+    "build:next": "npm run build --prefix apps/web-next",
+    "lint:next": "npm run lint --prefix apps/web-next",
+    "typecheck:next": "npm run typecheck --prefix apps/web-next",
+    "dev:worker": "npm run dev --prefix apps/worker",
+    "build:worker": "npm run build --prefix apps/worker",
+    "typecheck:worker": "npm run typecheck --prefix apps/worker",
+    "typecheck": "npm run typecheck --prefix apps/worker && npm run typecheck --prefix apps/web-next"
+  },
+  "workspaces": [
+    "apps/worker",
+    "apps/web-next"
+  ]
+}

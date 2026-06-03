@@ -1,0 +1,28 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: solospider-redis
+    ports:
+      - "6379:6379"
+
+  worker:
+    build:
+      context: ./apps/worker
+    container_name: solospider-worker
+    env_file:
+      - ./apps/worker/.env
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+
+  frontend:
+    build:
+      context: ./apps/web-next
+    container_name: solospider-frontend
+    env_file:
+      - ./apps/web-next/.env
+    depends_on:
+      - worker
+    ports:
+      - "3000:3000"

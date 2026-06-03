@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Worker typecheck
+        run: npm run typecheck --prefix apps/worker
+
+      - name: Next typecheck
+        run: npm run typecheck --prefix apps/web-next
+
+      - name: Worker build
+        run: npm run build --prefix apps/worker
+
+      - name: Next build
+        run: npm run build --prefix apps/web-next

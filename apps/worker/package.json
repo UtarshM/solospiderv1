@@ -1,0 +1,34 @@
+{
+  "name": "solospider-worker",
+  "version": "1.0.0",
+  "description": "SoloSpider background worker — crawling, AI prompt scanning, GEO scoring",
+  "private": true,
+  "type": "module",
+  "main": "dist/worker.js",
+  "scripts": {
+    "dev": "NODE_OPTIONS='--max-old-space-size=1024' tsx watch src/worker.ts",
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "bullmq": "^5.4.2",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.3.2",
+    "node-cron": "^3.0.3",
+    "node-html-parser": "^6.1.13",
+    "pino": "^9.1.0",
+    "pino-pretty": "^11.0.0",
+    "undici": "^6.19.2",
+    "ws": "^8.20.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.4"
+  }
+}
