@@ -9,7 +9,7 @@ export const MarketingFooter = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_1fr] gap-8 lg:gap-12 mb-16">
           <div className="flex flex-col gap-4">
             <Link href="/" className="mb-2">
-              <img src="/solospider.webp" alt="Solo Spider" className="h-[34px] w-auto block filter brightness-0 invert" />
+              <img src="/assets/solospider-logo.png" alt="Solo Spider" className="h-[34px] w-auto block filter brightness-0 invert" />
             </Link>
             <p className="text-[14px] text-white/65 max-w-[320px] leading-[1.6]">
               Solo Spider — Replace Your Entire Digital Marketing Team With One Tool.

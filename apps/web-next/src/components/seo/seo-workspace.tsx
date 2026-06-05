@@ -65,6 +65,72 @@ export function SeoWorkspace() {
   const [crawlerMaxPages, setCrawlerMaxPages] = useState(50);
   const [crawling, setCrawling] = useState(false);
   const [expandedIssues, setExpandedIssues] = useState<Record<string, boolean>>({});
+  const [aiRecommendations, setAiRecommendations] = useState<Record<string, {
+    recommendation: string;
+    codeSnippet?: string;
+    explanation?: string;
+    loading: boolean;
+    error?: string;
+  }>>({});
+
+  const handleCopyText = (text: string, message = "Copied to clipboard!") => {
+    navigator.clipboard.writeText(text);
+    toast.success(message);
+  };
+
+  const triggerAiRecommendation = async (issueId: string, pageItem: { url: string; detail?: string | number | null }) => {
+    const cacheKey = `${issueId}-${pageItem.url}`;
+    
+    // Set loading state
+    setAiRecommendations(prev => ({
+      ...prev,
+      [cacheKey]: { recommendation: "", loading: true }
+    }));
+
+    // Find corresponding crawled page to extract title, desc, h1, etc.
+    const pageDetails = crawledPages.find(p => p.url === pageItem.url);
+
+    try {
+      const res = await fetch("/api/seo/analyze-issue", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url: pageItem.url,
+          issueId,
+          currentTitle: pageDetails?.title,
+          currentMetaDesc: pageDetails?.meta_desc,
+          currentH1: pageDetails?.h1,
+          wordCount: pageDetails?.word_count,
+          schemaTypes: pageDetails?.schema_types
+        })
+      });
+
+      if (!res.ok) throw new Error(`API returned status ${res.status}`);
+      const data = await res.json();
+      
+      setAiRecommendations(prev => ({
+        ...prev,
+        [cacheKey]: {
+          recommendation: data.recommendation || "",
+          codeSnippet: data.codeSnippet,
+          explanation: data.explanation || "",
+          loading: false
+        }
+      }));
+    } catch (err: any) {
+      console.error("AI Recommendation error:", err);
+      setAiRecommendations(prev => ({
+        ...prev,
+        [cacheKey]: {
+          recommendation: "",
+          loading: false,
+          error: err.message || "Failed to generate recommendation"
+        }
+      }));
+    }
+  };
 
   // 1. Fetch live crawled pages
   const crawledPagesQuery = useQuery({
@@ -837,36 +903,97 @@ export function SeoWorkspace() {
                             Copy or test direct link
                           </span>
                         </div>
-                        <div className="max-h-60 overflow-y-auto border border-slate-150 border-slate-200/60 rounded-xl bg-white divide-y divide-slate-100 shadow-inner scrollbar-thin">
+                        <div className="max-h-[500px] overflow-y-auto border border-slate-150 border-slate-200/60 rounded-xl bg-white divide-y divide-slate-100 shadow-inner scrollbar-thin">
                           {issue.failedPages.map((page, pIdx) => (
-                            <div key={pIdx} className="flex items-center justify-between p-3 hover:bg-slate-50/50 transition-colors">
-                              <div className="flex items-center gap-3 min-w-0 pr-4">
-                                <span className="text-xs font-black text-slate-350 text-slate-400 shrink-0 w-6 text-right">{pIdx + 1}.</span>
-                                <div className="truncate">
-                                  <span className="text-xs font-mono font-medium text-slate-700 break-all select-all">{page.url}</span>
-                                  {page.detail && (
-                                    <span className="block text-[10px] font-extrabold text-slate-400 mt-0.5">{page.detail}</span>
-                                  )}
+                            <div key={pIdx} className="flex flex-col gap-3 p-3.5 hover:bg-slate-50/50 transition-colors">
+                              <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-3 min-w-0 pr-4">
+                                  <span className="text-xs font-black text-slate-350 text-slate-400 shrink-0 w-6 text-right">{pIdx + 1}.</span>
+                                  <div className="truncate">
+                                    <span className="text-xs font-mono font-medium text-slate-700 break-all select-all">{page.url}</span>
+                                    {page.detail && (
+                                      <span className="block text-[10px] font-extrabold text-slate-400 mt-0.5">{page.detail}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button 
+                                    onClick={() => triggerAiRecommendation(issue.id, page)}
+                                    className="flex items-center gap-1 text-[10px] font-black bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 px-2 py-1 rounded-lg transition-colors cursor-pointer shadow-sm"
+                                    title="Get AI Fix Suggestions"
+                                  >
+                                    <Sparkles className="w-3 h-3 text-indigo-500" />
+                                    {aiRecommendations[`${issue.id}-${page.url}`] ? "Re-Analyze" : "AI Fix"}
+                                  </button>
+                                  <button 
+                                    onClick={() => handleCopyUrl(page.url)}
+                                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100 cursor-pointer"
+                                    title="Copy URL"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                  <a 
+                                    href={page.url} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100 flex items-center justify-center"
+                                    title="Open Page"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button 
-                                  onClick={() => handleCopyUrl(page.url)}
-                                  className="p-1.5 text-slate-400 hover:text-indigo-650 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100 cursor-pointer"
-                                  title="Copy URL"
-                                >
-                                  <Copy className="w-3.5 h-3.5" />
-                                </button>
-                                <a 
-                                  href={page.url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="p-1.5 text-slate-400 hover:text-indigo-650 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100 flex items-center justify-center"
-                                  title="Open Page"
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                </a>
-                              </div>
+
+                              {/* AI Recommendation Details */}
+                              {aiRecommendations[`${issue.id}-${page.url}`] && (
+                                <div className="ml-9 border border-indigo-100 bg-indigo-50/20 rounded-xl p-3.5 space-y-3.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                                  {aiRecommendations[`${issue.id}-${page.url}`].loading ? (
+                                    <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                                      <Loader2 className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
+                                      <span>Generating custom SEO recommendation...</span>
+                                    </div>
+                                  ) : aiRecommendations[`${issue.id}-${page.url}`].error ? (
+                                    <div className="flex items-center gap-1.5 text-xs text-red-500 font-semibold">
+                                      <AlertCircle className="w-4 h-4 shrink-0" />
+                                      <span>{aiRecommendations[`${issue.id}-${page.url}`].error}</span>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      <div className="flex items-start justify-between gap-4">
+                                        <div className="space-y-1">
+                                          <span className="text-[9px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">AI Recommendation</span>
+                                          <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap font-medium">
+                                            {aiRecommendations[`${issue.id}-${page.url}`].recommendation}
+                                          </div>
+                                        </div>
+                                        {aiRecommendations[`${issue.id}-${page.url}`].codeSnippet && (
+                                          <button 
+                                            onClick={() => handleCopyText(aiRecommendations[`${issue.id}-${page.url}`].codeSnippet!, "Schema copied to clipboard!")}
+                                            className="shrink-0 p-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-lg shadow-sm text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                            title="Copy Code"
+                                          >
+                                            <Copy className="w-3.5 h-3.5" />
+                                            Copy Code
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {aiRecommendations[`${issue.id}-${page.url}`].codeSnippet && (
+                                        <pre className="text-[10px] font-mono p-3 bg-slate-950 text-slate-100 rounded-lg overflow-x-auto border border-slate-800 leading-relaxed max-h-40 scrollbar-thin">
+                                          <code>{aiRecommendations[`${issue.id}-${page.url}`].codeSnippet}</code>
+                                        </pre>
+                                      )}
+
+                                      <div className="border-t border-indigo-100/65 pt-2.5 flex items-start gap-2">
+                                        <HelpCircle className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
+                                        <p className="text-[10px] text-slate-500 font-semibold leading-relaxed">
+                                          <strong className="text-slate-600">Why this matters:</strong> {aiRecommendations[`${issue.id}-${page.url}`].explanation}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

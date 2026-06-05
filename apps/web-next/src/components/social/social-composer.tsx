@@ -75,24 +75,6 @@ const platformConfigs = {
     icon: Twitter,
     avatarUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80",
     handle: "builditindia_ai"
-  },
-  gmb: {
-    id: "gmb",
-    name: "Google Business",
-    color: "#4285F4",
-    bgClass: "from-blue-500 to-blue-600",
-    icon: Store,
-    avatarUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80",
-    handle: "Builditindia HQ"
-  },
-  pinterest: {
-    id: "pinterest",
-    name: "Pinterest",
-    color: "#E60023",
-    bgClass: "from-red-500 to-red-600",
-    icon: Pin,
-    avatarUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80",
-    handle: "builditindia"
   }
 };
 
@@ -129,9 +111,7 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
     facebook: "Builditindia is launching the premier all-in-one ecosystem for construction orchestration! Find trusted vendors, schedule logistics, and deploy smart sensors seamlessly. 🏗️✨ Learn more on our page. #BuilditIndia #PropTech #SaaS2026",
     instagram: "One unified workspace for the entire construction cycle. 👷‍♂️🏗️ Elevate your delivery speeds, minimize material waist, and coordinate workforce deployment. Link in bio! 🚀 #BuilditIndia #PropTech #ConstructionAutomation #FutureOfBuilders",
     linkedin: "We are thrilled to announce the official rollout of Builditindia - the ultimate construction intelligence platform. Designed to drive efficiency, maximize margin safety, and automate procurement pipelines for enterprise developers. Read our full whitepaper. #BuilditIndia #PropTech #B2BConstruction",
-    twitter: "The future of construction is digital, unified, and autonomous. Try Builditindia today: everything construction on one platform. 🏗️🤖 #BuilditIndia #PropTech",
-    gmb: "Visit our new location to discover the latest in construction tech! 🏢✨ #BuilditIndia #PropTech",
-    pinterest: "Inspiration for your next massive construction project. 🏗️✨ Explore our boards for more! #BuilditIndia #Architecture"
+    twitter: "The future of construction is digital, unified, and autonomous. Try Builditindia today: everything construction on one platform. 🏗️🤖 #BuilditIndia #PropTech"
   });
 
   // Media array
@@ -194,17 +174,13 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
       const generatedIg = `Smarter workflows. Faster builds. Better margins. 👷‍♂️⚙️\n\n${aiPrompt}\n\nSwipe left to see our latest dashboard deployments! 🚀 #BuilditIndia #ConstructionAutomation #PropTech`;
       const generatedLi = `Autonomous project execution in PropTech is no longer a concept—it is here.\n\n${aiPrompt}\n\nBuilditindia brings structural data processing and vendor logistics under one automated platform. Read the study. #PropTech #EnterpriseSoftware #RealEstate`;
       const generatedTw = `How we're driving 40% faster project dispatch schedules: ${aiPrompt} 🏗️📈 #BuilditIndia #PropTech`;
-      const generatedGmb = `Visit us to see how we're transforming construction orchestration:\n\n${aiPrompt}\n\nBook a demo today! 🌍🛡️ #BuilditIndia #PropTech`;
-      const generatedPin = `Smarter workflows and beautiful builds. 👷‍♂️⚙️\n\n${aiPrompt}\n\nSave this for your next project! 🚀 #BuilditIndia #ConstructionAutomation`;
 
       setUnifiedCaption(generatedUnified);
       setPlatformCaptions({
         facebook: generatedFb,
         instagram: generatedIg,
         linkedin: generatedLi,
-        twitter: generatedTw,
-        gmb: generatedGmb,
-        pinterest: generatedPin
+        twitter: generatedTw
       });
 
       setIsGenerating(false);
@@ -212,22 +188,66 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
     }, 1500);
   };
 
-  // Schedule mutation simulator
-  const handleSchedulePost = () => {
+  const createPostMutation = useMutation({
+    mutationFn: async (payload: {
+      project_id: string;
+      platform: string;
+      caption: string;
+      image_url?: string;
+      scheduled_at: string;
+    }) => {
+      const response = await fetch("/api/social/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to schedule post");
+      }
+      return response.json();
+    }
+  });
+
+  // Schedule mutation
+  const handleSchedulePost = async () => {
+    if (!activeProject) {
+      toast.error("Please select a project first.");
+      return;
+    }
     if (selectedPlatforms.length === 0) {
       toast.error("Please select at least one platform to publish.");
       return;
     }
 
     const toastId = toast.loading("Scheduling post across selected channels...");
+    const scheduledDateTime = new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString();
 
-    setTimeout(() => {
+    try {
+      for (const platform of selectedPlatforms) {
+        const captionText = isCustomPostEnabled 
+          ? platformCaptions[platform] || unifiedCaption 
+          : unifiedCaption;
+
+        await createPostMutation.mutateAsync({
+          project_id: activeProject.id,
+          platform,
+          caption: captionText,
+          image_url: mediaUrls[0] || undefined,
+          scheduled_at: scheduledDateTime,
+        });
+      }
+
       toast.dismiss(toastId);
       toast.success("Social Post Scheduled successfully!", {
         description: `Scheduled for ${scheduleDate} at ${scheduleTime} across: ${selectedPlatforms.map(p => p.toUpperCase()).join(", ")}`
       });
+      queryClient.invalidateQueries({ queryKey: ["social_posts", activeProject.id] });
       if (onBack) onBack();
-    }, 1200);
+    } catch (err: any) {
+      toast.dismiss(toastId);
+      toast.error("Error scheduling post", { description: err.message });
+    }
   };
 
   return (
@@ -1073,79 +1093,6 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                         </div>
                       </div>
 
-                    </div>
-                  )}
-
-                  {/* --- PLATFORM 5: GMB FEED PREVIEW --- */}
-                  {activePreviewPlatform === "gmb" && (
-                    <div className="w-full p-4.5 space-y-3.5 select-none animate-in fade-in duration-200 bg-white">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
-                            G
-                          </div>
-                          <div>
-                            <span className="text-[13px] font-black text-slate-900 block leading-snug">
-                              {platformConfigs.gmb.handle}
-                            </span>
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              Update
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {mediaUrls.length > 0 && (
-                        <div className="rounded-xl overflow-hidden border border-slate-150 relative bg-slate-50">
-                          <img src={mediaUrls[0]} className="w-full aspect-[4/3] object-cover" alt="GMB attachment" />
-                        </div>
-                      )}
-
-                      <p className="text-[12.5px] text-slate-800 leading-relaxed whitespace-pre-wrap pl-0.5 mt-2">
-                        {getActiveCaption("gmb") || "Type some details to build post preview..."}
-                      </p>
-
-                      {isCtaEnabled && (
-                        <div className="mt-3">
-                          <a href={ctaUrl} target="_blank" rel="noreferrer" className="block text-center bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-[12px] font-bold px-4 py-2.5 rounded-xl transition-colors">
-                            {ctaType}
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* --- PLATFORM 6: PINTEREST FEED PREVIEW --- */}
-                  {activePreviewPlatform === "pinterest" && (
-                    <div className="w-full p-4 select-none animate-in fade-in duration-200 bg-slate-100 min-h-[500px] flex justify-center">
-                      <div className="w-full max-w-[280px] bg-white rounded-2xl overflow-hidden shadow-sm self-start mt-4 border border-slate-200/50">
-                        {mediaUrls.length > 0 ? (
-                          <div className="relative">
-                            <img src={mediaUrls[0]} className="w-full object-cover" alt="Pin attachment" />
-                            <div className="absolute top-2 right-2 bg-red-600 text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-sm">
-                              Save
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="w-full aspect-[2/3] bg-slate-100 flex items-center justify-center">
-                            <ImageIcon className="w-10 h-10 text-slate-300" />
-                          </div>
-                        )}
-                        
-                        <div className="p-3">
-                          <p className="text-[11px] font-bold text-slate-900 leading-snug line-clamp-2">
-                            {getActiveCaption("pinterest") || "Type some details to build post preview..."}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <img 
-                              src={platformConfigs.pinterest.avatarUrl} 
-                              className="w-5 h-5 rounded-full object-cover" 
-                              alt="Pinterest Profile"
-                            />
-                            <span className="text-[10px] text-slate-500 font-semibold truncate">{platformConfigs.pinterest.handle}</span>
-                          </div>
-                        </div>
-                      </div>
                     </div>
                   )}
 

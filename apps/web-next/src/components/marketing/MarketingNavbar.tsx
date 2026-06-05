@@ -27,7 +27,7 @@ export const MarketingNavbar = () => {
       <div className="max-w-[1240px] mx-auto px-7">
         <div className="flex items-center justify-between h-[72px]">
           <Link href="/" className="flex items-center gap-2.5 font-display font-extrabold text-[20px] tracking-tight">
-            <img src="/solospider.webp" alt="Solo Spider" className="h-[34px] w-auto block" />
+            <img src="/assets/solospider-logo.png" alt="Solo Spider" className="h-[34px] w-auto block" />
           </Link>
 
           {/* Desktop Nav */}
