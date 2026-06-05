@@ -30,7 +30,11 @@ import {
   Megaphone,
   Clapperboard,
   PlusCircle,
-  LayoutTemplate
+  LayoutTemplate,
+  Facebook,
+  Instagram,
+  Linkedin,
+  Twitter
 } from "lucide-react";
 
 // Platform styling details
@@ -116,6 +120,90 @@ export function SocialPlanner() {
       return data;
     }
   });
+
+  const connectAccountMutation = useMutation({
+    mutationFn: async (platform: string) => {
+      if (!activeProject) throw new Error("No active project");
+      
+      const cleanName = activeProject.name.toLowerCase().replace(/\s+/g, "");
+      const handle = platform === "facebook" ? activeProject.name
+                  : platform === "instagram" ? `@${cleanName}_ig`
+                  : platform === "linkedin" ? `${activeProject.name} Company`
+                  : `@${cleanName}_x`;
+
+      const { data, error } = await supabase
+        .from("social_accounts")
+        .upsert({
+          project_id: activeProject.id,
+          platform,
+          handle,
+          connection_status: "connected",
+          followers_count: "1.2K",
+          posts_count: "24",
+        }, { onConflict: "project_id,platform" });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["social_accounts", activeProject?.id] });
+      toast.success("Account connected successfully!");
+    },
+    onError: (err: any) => {
+      toast.error("Error connecting account: " + err.message);
+    }
+  });
+
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const uploadedUrls: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `social/${fileName}`;
+
+      try {
+        const { data, error } = await supabase.storage
+          .from("social_media")
+          .upload(filePath, file);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("social_media")
+          .getPublicUrl(filePath);
+
+        uploadedUrls.push(publicUrl);
+      } catch (err: any) {
+        toast.error(`Failed to upload ${file.name}: ${err.message}`);
+      }
+    }
+
+    if (uploadedUrls.length > 0) {
+      setMediaList((prev) => [...prev, ...uploadedUrls]);
+      toast.success(`Successfully uploaded ${uploadedUrls.length} file(s)!`);
+    }
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  useEffect(() => {
+    if (accountsQuery.data && accountsQuery.data.length > 0) {
+      const connectedPlatforms = accountsQuery.data.map(acc => acc.platform);
+      setSelectedPlatforms((prev) => {
+        const valid = prev.filter(p => connectedPlatforms.includes(p));
+        return valid.length > 0 ? valid : [connectedPlatforms[0]];
+      });
+    }
+  }, [accountsQuery.data]);
 
   // Fetch Scheduled Posts from DB
   const postsQuery = useQuery({
@@ -251,7 +339,15 @@ export function SocialPlanner() {
   const allScheduledPosts = [...(postsQuery.data || []), ...defaultScheduledItems];
 
   // Check how many platforms are connected dynamically
-  const connectedCount = accountsQuery.data?.length || 4; // defaults to 4 connected for gorgeous UI showcase
+  const connectedCount = accountsQuery.data?.length || 0;
+
+  if (accountsQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+      </div>
+    );
+  }
 
   if (viewMode === "composer") {
     return (
@@ -260,6 +356,57 @@ export function SocialPlanner() {
         initialDate={scheduleDate} 
         initialTime={scheduleTime} 
       />
+    );
+  }
+
+  if (connectedCount === 0) {
+    return (
+      <div className="space-y-6 max-w-4xl mx-auto py-8">
+        <div className="text-center space-y-2">
+          <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">Connect Social Channels</h2>
+          <p className="text-slate-500 text-sm max-w-md mx-auto">
+            You haven't integrated any social media accounts yet. Connect your accounts of Meta, X, and LinkedIn to plan, create, and schedule content.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
+          {Object.entries(platformMeta).map(([key, meta]) => {
+            const PlatformIcon = key === "facebook" ? Facebook : key === "instagram" ? Instagram : key === "linkedin" ? Linkedin : Twitter;
+            const isConnecting = connectAccountMutation.isPending && connectAccountMutation.variables === key;
+            return (
+              <div key={key} className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between hover:shadow-md transition-all duration-200 relative overflow-hidden group">
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-tr ${meta.bg} flex items-center justify-center text-white`}>
+                      <PlatformIcon className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">{meta.name}</h3>
+                      <p className="text-xs text-slate-400">Integrate brand sharing</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Connect your {meta.name} account to schedule posts, check performance analytics, and use AI caption suggestions tailored for your audience.
+                  </p>
+                </div>
+                <button
+                  onClick={() => connectAccountMutation.mutate(key)}
+                  disabled={connectAccountMutation.isPending}
+                  className="w-full mt-6 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isConnecting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  Connect {meta.name}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     );
   }
 
@@ -590,19 +737,26 @@ export function SocialPlanner() {
               </div>
 
               <div className="mt-4 space-y-4">
-                {connectedStats.map((stat) => {
-                  const meta = platformMeta[stat.platform as keyof typeof platformMeta] || platformMeta.instagram;
-                  return (
-                    <div key={stat.platform} className="flex items-center justify-between group hover:bg-slate-50/50 p-1.5 rounded-xl transition-all">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${meta.bg} flex items-center justify-center text-white text-xs font-black shadow-sm`}>
-                          {stat.platform[0].toUpperCase()}
+                {connectedStats
+                  .filter((stat) => accountsQuery.data?.some((acc) => acc.platform === stat.platform))
+                  .map((stat) => {
+                    const meta = platformMeta[stat.platform as keyof typeof platformMeta] || platformMeta.instagram;
+                    const cleanName = (activeProject?.name || "yourbrand").toLowerCase().replace(/\s+/g, "");
+                    const dynamicLabel = stat.platform === "instagram" ? `@${cleanName}_ig`
+                                     : stat.platform === "facebook" ? activeProject?.name || "Your Page"
+                                     : stat.platform === "linkedin" ? activeProject?.name || "Your Company"
+                                     : `@${cleanName}_x`;
+                    return (
+                      <div key={stat.platform} className="flex items-center justify-between group hover:bg-slate-50/50 p-1.5 rounded-xl transition-all">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${meta.bg} flex items-center justify-center text-white text-xs font-black shadow-sm`}>
+                            {stat.platform[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">{meta.name}</p>
+                            <p className="text-[10px] text-slate-400 font-medium">{dynamicLabel}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-800">{meta.name}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">{meta.label}</p>
-                        </div>
-                      </div>
 
                       {/* Reach & Engagement stats */}
                       <div className="flex items-center gap-5">
@@ -680,29 +834,31 @@ export function SocialPlanner() {
               <div>
                 <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Select Platforms</label>
                 <div className="flex flex-wrap gap-2">
-                  {Object.entries(platformMeta).map(([key, meta]) => {
-                    const isSelected = selectedPlatforms.includes(key);
-                    return (
-                      <button
-                        key={key}
-                        onClick={() => {
-                          if (isSelected) {
-                            setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
-                          } else {
-                            setSelectedPlatforms([...selectedPlatforms, key]);
-                          }
-                        }}
-                        className={`flex items-center gap-2 py-1.5 px-3 rounded-full text-xs font-semibold border transition-all duration-200 select-none ${
-                          isSelected
-                            ? `bg-gradient-to-r ${meta.bg} text-white border-transparent shadow-[0_2px_8px_rgba(124,58,237,0.25)]`
-                            : "bg-white hover:bg-slate-50 text-slate-500 border-slate-200"
-                        }`}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${isSelected ? "bg-white" : `bg-gradient-to-tr ${meta.bg}`}`}></span>
-                        {meta.name}
-                      </button>
-                    );
-                  })}
+                  {Object.entries(platformMeta)
+                    .filter(([key]) => accountsQuery.data?.some(acc => acc.platform === key))
+                    .map(([key, meta]) => {
+                      const isSelected = selectedPlatforms.includes(key);
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
+                            } else {
+                              setSelectedPlatforms([...selectedPlatforms, key]);
+                            }
+                          }}
+                          className={`flex items-center gap-2 py-1.5 px-3 rounded-full text-xs font-semibold border transition-all duration-200 select-none ${
+                            isSelected
+                              ? `bg-gradient-to-r ${meta.bg} text-white border-transparent shadow-[0_2px_8px_rgba(124,58,237,0.25)]`
+                              : "bg-white hover:bg-slate-50 text-slate-500 border-slate-200"
+                          }`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${isSelected ? "bg-white" : `bg-gradient-to-tr ${meta.bg}`}`}></span>
+                          {meta.name}
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
 
@@ -728,15 +884,28 @@ export function SocialPlanner() {
                   ))}
 
                   {/* Drag drop add block */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                  />
                   <button 
-                    onClick={() => {
-                      setMediaList([...mediaList, "https://images.unsplash.com/photo-1542744094-3a31f103e35f?w=500&auto=format&fit=crop&q=60"]);
-                      toast.success("Mock image added successfully!");
-                    }}
-                    className="aspect-square rounded-xl border-2 border-dashed border-slate-200 hover:border-violet-400 flex flex-col items-center justify-center text-slate-400 hover:text-violet-500 transition-colors bg-slate-50/50 hover:bg-violet-50/10 cursor-pointer active:scale-95"
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="aspect-square rounded-xl border-2 border-dashed border-slate-200 hover:border-violet-400 flex flex-col items-center justify-center text-slate-400 hover:text-violet-500 transition-colors bg-slate-50/50 hover:bg-violet-50/10 cursor-pointer active:scale-95 disabled:opacity-50"
                   >
-                    <Plus className="w-5 h-5 mb-1" />
-                    <span className="text-[9px] font-bold uppercase tracking-wider">Add</span>
+                    {isUploading ? (
+                      <Loader2 className="w-5 h-5 mb-1 animate-spin" />
+                    ) : (
+                      <Plus className="w-5 h-5 mb-1" />
+                    )}
+                    <span className="text-[9px] font-bold uppercase tracking-wider">
+                      {isUploading ? "Uploading..." : "Add"}
+                    </span>
                   </button>
                 </div>
               </div>

@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useProjects";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {
   Facebook,
@@ -79,7 +80,7 @@ const platformConfigs = {
 };
 
 const trendingHashtags = [
-  "BuilditIndia", "AEO", "PropTech", "ConstructionAutomation", "SocialSelling", "BrandGrowth", "Solospider", "SaaS2026"
+  "AEO", "SocialSelling", "BrandGrowth", "Solospider", "MarketingAutomation", "GrowthHacks", "SaaS2026"
 ];
 
 const mockImageOptions = [
@@ -98,6 +99,32 @@ interface SocialComposerProps {
 export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime = "10:00" }: SocialComposerProps) {
   const { activeProject } = useProjects();
   const queryClient = useQueryClient();
+  const supabase = getSupabaseBrowserClient();
+
+  const getDynamicHandle = (platform: string) => {
+    const name = activeProject?.name || "Your Brand";
+    const cleanName = name.toLowerCase().replace(/\s+/g, "");
+    switch (platform) {
+      case "facebook": return name;
+      case "instagram": return cleanName;
+      case "linkedin": return `${name} Company`;
+      case "twitter": return `${cleanName}_ai`;
+      default: return cleanName;
+    }
+  };
+
+  const accountsQuery = useQuery({
+    queryKey: ["social_accounts", activeProject?.id],
+    enabled: Boolean(activeProject?.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("social_accounts")
+        .select("*")
+        .eq("project_id", activeProject!.id);
+      if (error) throw error;
+      return data;
+    }
+  });
 
   // Basic Composer states
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["facebook", "instagram"]);
@@ -105,24 +132,42 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
   
   // Dynamic captions
   const [unifiedCaption, setUnifiedCaption] = useState(
-    "Everything Construction. One Platform. We are automating how developers, engineers, and builders source materials and track progress in real-time. 🏗️🚀 #BuilditIndia #PropTech"
+    "Everything Construction. One Platform. We are automating how developers, engineers, and builders source materials and track progress in real-time. 🏗️🚀"
   );
   const [platformCaptions, setPlatformCaptions] = useState<Record<string, string>>({
-    facebook: "Builditindia is launching the premier all-in-one ecosystem for construction orchestration! Find trusted vendors, schedule logistics, and deploy smart sensors seamlessly. 🏗️✨ Learn more on our page. #BuilditIndia #PropTech #SaaS2026",
-    instagram: "One unified workspace for the entire construction cycle. 👷‍♂️🏗️ Elevate your delivery speeds, minimize material waist, and coordinate workforce deployment. Link in bio! 🚀 #BuilditIndia #PropTech #ConstructionAutomation #FutureOfBuilders",
-    linkedin: "We are thrilled to announce the official rollout of Builditindia - the ultimate construction intelligence platform. Designed to drive efficiency, maximize margin safety, and automate procurement pipelines for enterprise developers. Read our full whitepaper. #BuilditIndia #PropTech #B2BConstruction",
-    twitter: "The future of construction is digital, unified, and autonomous. Try Builditindia today: everything construction on one platform. 🏗️🤖 #BuilditIndia #PropTech"
+    facebook: "Launching the premier all-in-one ecosystem! Find trusted vendors, schedule logistics, and deploy smart sensors seamlessly. 🏗️✨ Learn more on our page.",
+    instagram: "One unified workspace for the entire workflow cycle. 👷‍♂️🏗️ Elevate your delivery speeds and coordinate workforce deployment. Link in bio! 🚀",
+    linkedin: "We are thrilled to announce the official rollout of the ultimate business intelligence platform. Designed to drive efficiency, maximize margin safety, and automate procurement pipelines. Read our update.",
+    twitter: "The future is digital, unified, and autonomous. Try it today: everything on one platform. 🏗️🤖"
   });
+
+  // Apply project-based dynamic branding
+  useEffect(() => {
+    if (activeProject?.name) {
+      const name = activeProject.name;
+      const hash = name.replace(/\s+/g, "");
+      setUnifiedCaption(
+        `We are excited to share our latest updates from ${name}! Automating workflows and scaling operations in real-time. 🚀✨ #${hash} #FutureOfWork`
+      );
+      setPlatformCaptions({
+        facebook: `${name} is launching the premier all-in-one ecosystem to coordinate logistics and workflows. ✨ Learn more on our page. #${hash} #Automation`,
+        instagram: `One unified workspace for your entire workflow. 🚀 Elevate your delivery speeds and coordinate team deployment. Link in bio! #${hash} #Growth`,
+        linkedin: `We are thrilled to announce the official rollout of ${name} - the ultimate business intelligence platform designed to drive efficiency and automate operations. Read our update. #${hash} #SaaS`,
+        twitter: `The future of business is digital, unified, and autonomous. Try ${name} today: everything on one platform. 🤖 #${hash}`
+      });
+      setCtaUrl(`https://${hash.toLowerCase()}.com/register`);
+    }
+  }, [activeProject]);
 
   // Media array
   const [mediaUrls, setMediaUrls] = useState<string[]>([
-    "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=600&auto=format&fit=crop&q=80"
+    "https://images.unsplash.com/photo-1542744094-3a31f103e35f?w=500&auto=format&fit=crop&q=60"
   ]);
 
   // CTA options
   const [isCtaEnabled, setIsCtaEnabled] = useState(true);
   const [ctaType, setCtaType] = useState("Learn More");
-  const [ctaUrl, setCtaUrl] = useState("https://builditindia.com/register");
+  const [ctaUrl, setCtaUrl] = useState("https://yourbrand.com/register");
 
   // Scheduling details
   const [scheduleDate, setScheduleDate] = useState(initialDate);
@@ -136,12 +181,63 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const uploadedUrls: string[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `social/${fileName}`;
+
+      try {
+        const { data, error } = await supabase.storage
+          .from("social_media")
+          .upload(filePath, file);
+
+        if (error) throw error;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("social_media")
+          .getPublicUrl(filePath);
+
+        uploadedUrls.push(publicUrl);
+      } catch (err: any) {
+        toast.error(`Failed to upload ${file.name}: ${err.message}`);
+      }
+    }
+
+    if (uploadedUrls.length > 0) {
+      setMediaUrls((prev) => [...prev, ...uploadedUrls]);
+      toast.success(`Successfully uploaded ${uploadedUrls.length} file(s)!`);
+    }
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   // Ensure active preview platform is one of the selected ones
   useEffect(() => {
     if (selectedPlatforms.length > 0 && !selectedPlatforms.includes(activePreviewPlatform)) {
       setActivePreviewPlatform(selectedPlatforms[0]);
     }
   }, [selectedPlatforms, activePreviewPlatform]);
+
+  useEffect(() => {
+    if (accountsQuery.data && accountsQuery.data.length > 0) {
+      const connectedPlatforms = accountsQuery.data.map(acc => acc.platform);
+      setSelectedPlatforms((prev) => {
+        const valid = prev.filter(p => connectedPlatforms.includes(p));
+        return valid.length > 0 ? valid : [connectedPlatforms[0]];
+      });
+    }
+  }, [accountsQuery.data]);
 
   const handlePlatformCaptionChange = (platform: string, text: string) => {
     setPlatformCaptions((prev) => ({ ...prev, [platform]: text }));
@@ -294,44 +390,46 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
             </h3>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {Object.entries(platformConfigs).map(([key, config]) => {
-                const isSelected = selectedPlatforms.includes(key);
-                const PlatformIcon = config.icon;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      if (isSelected) {
-                        if (selectedPlatforms.length === 1) {
-                          toast.error("Must select at least one social channel.");
-                          return;
+              {Object.entries(platformConfigs)
+                .filter(([key]) => accountsQuery.data?.some(acc => acc.platform === key))
+                .map(([key, config]) => {
+                  const isSelected = selectedPlatforms.includes(key);
+                  const PlatformIcon = config.icon;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => {
+                        if (isSelected) {
+                          if (selectedPlatforms.length === 1) {
+                            toast.error("Must select at least one social channel.");
+                            return;
+                          }
+                          setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
+                        } else {
+                          setSelectedPlatforms([...selectedPlatforms, key]);
                         }
-                        setSelectedPlatforms(selectedPlatforms.filter(p => p !== key));
-                      } else {
-                        setSelectedPlatforms([...selectedPlatforms, key]);
-                      }
-                    }}
-                    className={`flex items-center gap-2.5 p-3 rounded-2xl border text-xs font-extrabold transition-all relative select-none cursor-pointer overflow-hidden ${
-                      isSelected 
-                        ? `bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-950/10` 
-                        : "bg-white border-slate-200 hover:border-slate-300 text-slate-600"
-                    }`}
-                  >
-                    <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-white ${
-                      isSelected ? `bg-gradient-to-tr ${config.bgClass}` : "bg-slate-100 text-slate-500"
-                    }`}>
-                      <PlatformIcon className="w-4 h-4" />
-                    </div>
-                    {config.name}
-                    
-                    {isSelected && (
-                      <div className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-violet-600 text-white flex items-center justify-center scale-90">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      }}
+                      className={`flex items-center gap-2.5 p-3 rounded-2xl border text-xs font-extrabold transition-all relative select-none cursor-pointer overflow-hidden ${
+                        isSelected 
+                          ? `bg-slate-900 border-slate-900 text-white shadow-md shadow-slate-950/10` 
+                          : "bg-white border-slate-200 hover:border-slate-300 text-slate-600"
+                      }`}
+                    >
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-white ${
+                        isSelected ? `bg-gradient-to-tr ${config.bgClass}` : "bg-slate-100 text-slate-500"
+                      }`}>
+                        <PlatformIcon className="w-4 h-4" />
                       </div>
-                    )}
-                  </button>
-                );
-              })}
+                      {config.name}
+                      
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-violet-600 text-white flex items-center justify-center scale-90">
+                          <Check className="w-2.5 h-2.5 stroke-[3]" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
             </div>
           </div>
 
@@ -374,12 +472,28 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
               ))}
 
               {/* Add attachment block */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept="image/*"
+                multiple
+                className="hidden"
+              />
               <button 
-                onClick={handleAddMockPhoto}
-                className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 hover:border-violet-500 hover:bg-violet-50/5 flex flex-col items-center justify-center text-slate-400 hover:text-violet-600 transition-all cursor-pointer active:scale-95"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="aspect-square rounded-2xl border-2 border-dashed border-slate-200 hover:border-violet-500 hover:bg-violet-50/5 flex flex-col items-center justify-center text-slate-400 hover:text-violet-600 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
               >
-                <Plus className="w-6 h-6 mb-1" />
-                <span className="text-[10px] font-black uppercase tracking-wider">Add Photo</span>
+                {isUploading ? (
+                  <Loader2 className="w-6 h-6 mb-1 animate-spin" />
+                ) : (
+                  <Plus className="w-6 h-6 mb-1" />
+                )}
+                <span className="text-[10px] font-black uppercase tracking-wider">
+                  {isUploading ? "Uploading..." : "Add Photo"}
+                </span>
               </button>
             </div>
             
@@ -697,15 +811,17 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                   onChange={(e) => setActivePreviewPlatform(e.target.value)}
                   className="text-xs font-black text-slate-800 bg-slate-50 border border-slate-200 rounded-xl pl-3.5 pr-8 py-2 outline-none cursor-pointer appearance-none shadow-sm"
                 >
-                  {selectedPlatforms.map((plat) => {
-                    const config = platformConfigs[plat as keyof typeof platformConfigs];
-                    if (!config) return null;
-                    return (
-                      <option key={plat} value={plat}>
-                        {config.name} Feed Preview
-                      </option>
-                    );
-                  })}
+                  {selectedPlatforms
+                    .filter(plat => accountsQuery.data?.some(acc => acc.platform === plat))
+                    .map((plat) => {
+                      const config = platformConfigs[plat as keyof typeof platformConfigs];
+                      if (!config) return null;
+                      return (
+                        <option key={plat} value={plat}>
+                          {config.name} Feed Preview
+                        </option>
+                      );
+                    })}
                 </select>
                 <div className="absolute right-3 top-3 pointer-events-none w-3.5 h-3.5 text-slate-400 bg-slate-50 flex items-center justify-center">
                   ▼
@@ -771,7 +887,7 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                           />
                           <div>
                             <span className="text-[13px] font-black text-slate-900 hover:underline block leading-snug cursor-pointer">
-                              {platformConfigs.facebook.handle}
+                              {getDynamicHandle("facebook")}
                             </span>
                             <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1 mt-0.5">
                               Just now · <Globe className="w-3 h-3" />
@@ -834,7 +950,7 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                             <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-3.5 flex justify-between items-center select-none shadow-inner">
                               <div className="flex-1 min-w-0 pr-3">
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block leading-none">
-                                  {new URL(ctaUrl || "https://builditindia.com").hostname.toUpperCase()}
+                                  {new URL(ctaUrl || "https://yourbrand.com").hostname.toUpperCase()}
                                 </span>
                                 <span className="text-[12.5px] font-black text-slate-800 truncate block mt-1 leading-snug">
                                   {ctaType} & Register
@@ -886,7 +1002,7 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                           />
                           <div>
                             <span className="text-[12px] font-black text-slate-900 block leading-tight cursor-pointer hover:underline">
-                              {platformConfigs.instagram.handle}
+                              {getDynamicHandle("instagram")}
                             </span>
                             <span className="text-[10px] text-slate-400 font-medium block mt-0.5">Mumbai, India</span>
                           </div>
@@ -936,12 +1052,12 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                         </div>
 
                         {/* Likes counter details */}
-                        <p className="text-[12px] font-black text-slate-900 leading-tight">Liked by buildit_ai and 8,432 others</p>
+                        <p className="text-[12px] font-black text-slate-900 leading-tight">Liked by {(activeProject?.name || "yourbrand").toLowerCase().replace(/\s+/g, "")}_fan and 8,432 others</p>
 
                         {/* Text Caption display */}
                         <div className="text-[12px] text-slate-800 leading-relaxed">
                           <span className="font-black text-slate-900 mr-1.5 hover:underline cursor-pointer">
-                            {platformConfigs.instagram.handle}
+                            {getDynamicHandle("instagram")}
                           </span>
                           <span className="whitespace-pre-wrap">
                             {getActiveCaption("instagram") || "Write custom details in composer..."}
@@ -971,7 +1087,7 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                           />
                           <div>
                             <span className="text-[13px] font-black text-slate-900 hover:underline hover:text-sky-700 block cursor-pointer">
-                              {platformConfigs.linkedin.handle}
+                              {getDynamicHandle("linkedin")}
                             </span>
                             <span className="text-[10px] text-slate-400 font-bold block mt-0.5">38,412 followers</span>
                             <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1.5 mt-0.5">
@@ -1002,7 +1118,7 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                                   {ctaType} & Register
                                 </span>
                                 <span className="text-[10px] text-slate-400 font-extrabold uppercase mt-0.5 block leading-none">
-                                  {new URL(ctaUrl || "https://builditindia.com").hostname}
+                                  {new URL(ctaUrl || "https://yourbrand.com").hostname}
                                 </span>
                               </div>
                               <span className="bg-white border border-slate-300 text-violet-600 text-[11px] font-extrabold px-4 py-2 rounded-full whitespace-nowrap shadow-sm hover:bg-slate-50 cursor-pointer">
@@ -1058,7 +1174,7 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
                               {platformConfigs.twitter.name}
                             </span>
                             <span className="text-[11px] text-slate-400 font-semibold truncate block leading-none">
-                              @{platformConfigs.twitter.handle} · Just now
+                              @{getDynamicHandle("twitter")} · Just now
                             </span>
                           </div>
 
@@ -1106,8 +1222,10 @@ export function SocialComposer({ onBack, initialDate = "2026-05-25", initialTime
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Validation Dashboard</span>
               
               <div className="space-y-1.5">
-                {selectedPlatforms.map((plat) => {
-                  const limit = plat === "twitter" ? 280 : 2200;
+                {selectedPlatforms
+                  .filter(plat => accountsQuery.data?.some(acc => acc.platform === plat))
+                  .map((plat) => {
+                    const limit = plat === "twitter" ? 280 : 2200;
                   const textLength = getActiveCaption(plat).length;
                   const valid = textLength <= limit;
                   const platName = platformConfigs[plat as keyof typeof platformConfigs]?.name || plat;
