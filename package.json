@@ -18,5 +18,8 @@
   "workspaces": [
     "apps/worker",
     "apps/web-next"
-  ]
+  ],
+  "dependencies": {
+    "interactive": "^0.1.9"
+  }
 }
